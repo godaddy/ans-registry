@@ -104,6 +104,7 @@ The RA's internal AIM instance validates the attestation chain continuously. It 
 
 **3.1.5 Interfaces Hosted by the RA System:**
 * **Dynamic Badge Lander:** Shows real-time trust status for agents - green checkmark if valid, red X if compromised
+* **Dynamic Badge Lander:** Serves the agent's real-time trust status. This interface MUST support a dual-format deployment: 1) The official forensic verification portal via the standalone HTML page, and 2) an embeddable, real-time JavaScript snippet for display on the AHP's landing pages. The RA advises customers that the JS snippet is a visual trust symbol for human users and is not the cryptographic security mechanism.
 * **Audit Log Viewer:** Forensic history of state changes with cryptographic proofs
 * **Lifecycle Management APIs:** Private API endpoints where AHPs submit registrations, renewals, and revocations
 
@@ -193,17 +194,28 @@ The architecture uses two distinct Certificate Authority types:
 
 This separation allows the `PubSC` to follow slow, time-based public WebPKI rules for universal compatibility while the `PriCC` maintains the fast, event-driven lifecycle needed for agent identities.
 
-### 3.4 Third-party ecosystem
+### 3.4 The holistic trust framework: a 3-layer model
 
-The RA is the source of truth for registration, while independent external systems consume RA System public outputs for value-added services.
+The ANS' RA architecture is scoped to be the first layer, the foundational identity, of a required 3-layer trust model. In this, the RA answers "who are you?" It is limited to verifying and sealing the agent's identity via the PriCC and public commitment via the Agent Card hash into the TL.
+
+Having a layer 1 foundation enables a competitive ecosystem of external services to provide the higher-level trust guarantees necessary for high-stakes transactions:
+
+Layer 2 provides batch-updated or certification-updated operational maturity about the agent's credentials (its attested claims). These third-party services attest to how an agent is governed, such as SOC 2 compliance or HIPAA validation. The RA provides hooks for these claims in the Agent Card.
+
+Layer 3 provides up-to-the-second reputation about how the agent is currently behaving. It is expected that external services will continuously score the agent's real-time behavior, including transaction success and community flags, to detect exploits or non-compliance.
+
+Thus, the RA provides the immutable anchor of identity; the ecosystem (layers 2 and 3) builds the trust and reputation scores upon it.
+
+![Holistic Trust Framework for Agents](holistic-trust.png)
+*Figure 2: Holistic Trust Framework for Agents*
 
 **3.4.1 Discovery service:**
 
-Third-party applications consume the RA's Pub/Sub feed to build searchable agent indexes accessible through their own UI and API.
+Third-party applications at layer 3 consume the RA's Pub/Sub feed to build searchable agent indexes accessible through their own UI and API.
 
 **3.4.2 ANS Monitoring Service:**
 
-Third-party ANS Monitoring Services provide continuous integrity verification for registered agents. These services consume the RA's public event feed to build a list of active agents and their expected states (metadata hashes). They perform the ANS Integrity Monitor (AIM) function as independent, external services.
+Third-party ANS monitoring services provide layer 2 and layer 3 functions. For instance, the ANS Integrity Monitor operates at layer 2 and provides continuous integrity verification for registered agents; its findings contribute to behavioral scoring at layer 3.
 
 A competitive marketplace of monitoring services can emerge, offering different service levels: verification frequency, geographic distribution of workers, and alerting features. The RA is the source of truth for registration. ANS Monitors audit the live state of the internet against that truth.
 
@@ -242,7 +254,7 @@ Identifies the unique key within the KMS used to sign the Merkle Tree Root (e.g.
 The `agent_state` field follows a defined lifecycle and transitions between states based on specific events recorded in the Transparency Log. The diagram below illustrates all possible states and their triggering events.
 
 ![State Machine Diagram of the Agent Registration Lifecycle](state-machine-diagram.png)
-*Figure 2: State Machine Diagram of the Agent Registration Lifecycle*
+*Figure 3: State Machine Diagram of the Agent Registration Lifecycle*
 
 ### 4.5 Cryptographic data integrity standards
 
@@ -339,7 +351,7 @@ A three-layer hierarchy anchors trust. The Identity Layer uses the strictly defi
 
 #### 5.1.1 Tiers of Trust: Layering DANE on the PKI Foundation
 
-The ANS Registry uses DANE (DNS-Based Authentication of Named Entities) to strengthen the PKI trust model. DANE binds X.509 certificates to DNS names through TLSA records, creating cryptographic proof that a certificate belongs to a specific domain. Different tiers of trust require more robust use of DANE.
+The ANS Registry uses DANE (DNS-Based Authentication of Named Entities) to strengthen the PKI trust model. DANE binds X.509 certificates to DNS names through TLSA records, creating cryptographic proof that a certificate belongs to a specific domain. Different tiers of trust require more robust use of DANE.  
 
 **Bronze Tier: Standard PKI**. Basic TLS using certificates from public CAs. Agents accept any valid certificate signed by a trusted CA. This provides encryption and basic authentication but remains vulnerable to CA compromise or mistaken issuance.
 
@@ -409,9 +421,9 @@ time-based Public Server Certificate. An ANS-aware agent connects to the same FQ
 presenting its event-driven Private Identity Certificate to prove its specific, version-bound `ANSName`.
 
 This coexistence model addresses two scenarios. Simple agents or legacy clients may fall back to token-based
-authentication over standard TLS, which is a lower-assurance interaction pattern. High-assurance, ANS-to-ANS
-communication between agents registered with different RAs requires a different solution to bridge the private trust
-domains. ADR 009 (Solving the Trust Bootstrap Problem via a Client-Side Trust Provisioner) details the architectural
+authentication over standard TLS, which is a lower-assurance interaction pattern. High-assurance, ANS-to-ANS 
+communication between agents registered with different RAs requires a different solution to bridge the private trust 
+domains. ADR 009 (Solving the Trust Bootstrap Problem via a Client-Side Trust Provisioner) details the architectural 
 solution and its evolution in a multi-provider ecosystem.
 
 ### 5.7 Channel vs. message-level security
@@ -481,7 +493,7 @@ The remediation process must follow these principles:
 
 ## 6.0 Operational flow
 
-The complete lifecycle of an agent's identity within the ANS ecosystem differs from simpler models. Unlike simpler, time-based directory models where a single registration has a Time-to-Live (TTL), the ANS architecture employs a more granular, event-driven lifecycle. Each unique software version of an agent (including metadata such as Agent Card) is registered with its own immutable `ANSName`. The validity of this identity is not tied to a registration TTL, but to the validity period of its underlying, cryptographically-bound Identity Certificate. This version-centric approach, governed by the principle of "Strict Immutability," provides a much more precise and auditable trust model.
+The complete lifecycle of an agent's identity within the ANS ecosystem differs from simpler models. Unlike simpler, time-based directory models where a single registration has a Time-to-Live (TTL), the ANS architecture employs a more granular, event-driven lifecycle. Each unique software version of an agent (including metadata such as Agent Card) is registered with its own immutable `ANSName`. The validity of this identity is not tied to a registration TTL, but to the validity period of its underlying, cryptographically-bound Identity Certificate. This version-centric approach, governed by the principle of "Strict Immutability," provides a much more precise and auditable trust model.
 
 ### 6.1 Initial registration flow (full orchestration)
 The end-to-end process for new agent registration follows a multi-stage approach. An `ANSName` can be reserved in a `pending` state before all technical validations are complete, then transition to an `active` state.
@@ -540,7 +552,7 @@ sequenceDiagram
     PubSub->>Discovery: Notify Subscriber
     deactivate PubSub
 ```
-*Figure 3: Sequence Diagram of the Initial Agent Registration Flow*
+*Figure 4: Sequence Diagram of the Initial Agent Registration Flow*
 
 #### 6.1.1 Stage 1: Pending registration
 The AHP initiates the registration process.
@@ -557,7 +569,7 @@ Once the RA has a complete and valid `pending` registration, activation begins.
 
 * **Asynchronous Validation:** The RA orchestrates the required external validations. These checks MUST all pass before activation can proceed and include:
   * **Organization Identity Verification:** Verifying the legal entity of the provider for OV-level attestations.
-  * **Domain Control Validation:** The Registration Authority performs the ACME DNS-01 challenge. This cryptographically verifies the AHP's control over the domain.
+  * **Domain Control Validation:** The Registration Authority generates the ACME DNS-01 challenge string and returns it to the AHP. The AHP MUST execute the DNS write to provision the TXT record, allowing the RA to verify the public record. This prevents the security risk of OAuth token delegation.
   * **Schema Integrity Validation:** For each protocol in the Agent Card's `protocolExtensions` block, the RA fetches the schema content from the provided URL. It then calculates the hash and verifies it matches the `schema.hash` value.
 
 * **Atomic Activation Process:** Upon the successful completion of all validations, the RA performs the following irreversible sequence:
@@ -683,7 +695,7 @@ sequenceDiagram
     CA-->>RA: Confirmed
     deactivate CA
 ```
-*Figure 4: Sequence Diagram of the Agent Update/Version Bump Flow*
+*Figure 5: Sequence Diagram of the Agent Update/Version Bump Flow*
 
 ### 6.3 Agent renewal
 Certificate renewal happens when an Identity Certificate approaches expiration but the agent code hasn't changed. The AHP submits a new CSR for the exact same ANSName - no version increment. The RA performs lightweight re-validation, issues a fresh Identity Certificate with extended validity, and seals an `agent_renewed` event into the log. The renewed certificate gets delivered to the AHP for seamless rotation.
@@ -695,9 +707,9 @@ When an agent shuts down permanently, the AHP sends a signed revocation request 
 
 | Actor | Initial Registration Tasks | Ongoing Lifecycle Tasks | Deregistration Tasks |
 | :--- | :--- | :--- | :--- |
-| **Agent Provider**| Owns domain, authorizes RA via API, manages A/AAAA records. | Monitors renewals, submits config changes. | Submits deregistration request, revokes RA access. |
-| **Registration Authority**| Performs ACME DNS-01 challenge, provisions permanent records. | Re-runs ACME challenge, updates records. | Deletes all agent-specific records. |
-| **DNS Provider** | Hosts authorization endpoint, processes RA's API requests. | Processes RA's modification requests. | Processes deletion requests from the RA. |
+| **Agent Hosting Platform**| Owns domain, obtains persistent credential for DNS writes, manages A/AAAA records. | Uses persistent credential for autonomous DNS updates; monitors renewals, submits config changes. | Submits deregistration request, revokes RA access. |
+| **Registration Authority**| Generates ACME challenge, verifies public record, generates and verifies permanent record content. | Re-runs ACME challenge, updates records. | Deletes all agent-specific records. |
+| **DNS provider** | Hosts authorization endpoint (for AHP delegation); processes the AHP's API requests to provision ANS records. | Processes the AHP's modification requests for ANS records (upon RA instruction). | Processes deletion requests for ANS records from the AHP. |
 
 ### 6.6 Managing parallel release tracks
 A `releaseChannel` field in the Agent Card (e.g., "stable", "beta") manages parallel tracks. Each version has a unique `ANSName`, and each channel's lifecycle is managed independently.
@@ -775,16 +787,16 @@ The migration will be handled via a gradual, multi-step process that establishes
 | Item | Description |
 | :--- | :--- |
 | **Context** | An AHP may already possess a valid X.509 certificate for their service and may wish to use it in the registration process instead of having the RA issue a new one. A formal policy is needed to define if and when this is permissible. |
-| **Decision** | The BYOC policy is different for the two certificate types:<br><br>1. **Public Server Certificates:** BYOC is **PERMITTED, with a critical caveat.**<br>2. **Private Identity Certificates:** BYOC is strictly PROHIBITED. |
-| **Rationale** | The two-part policy balances customer convenience with trust model integrity.<br><br>**For Server Certificates:** AHPs can use existing public certificates for convenience, but the RA must still perform independent Domain Control Validation (e.g., ACME DNS-01) at registration. The certificate does not replace live validation.<br><br>**For Identity Certificates:** The Private Identity Certificate represents the RA's attestation of a validated `ANSName`. Accepting third-party certificates would compromise the RA's role as trust root - like a notary signing an unwitnessed document. The RA must control issuance to maintain integrity. |
+| **Decision** | The BYOC policy is different for the two certificate types:<br><br>1. Public Server Certificates: BYOC is PERMITTED, with a critical caveat. This includes standard and wildcard certificates.<br>2. Private Identity Certificates: BYOC is strictly PROHIBITED. |
+| **Rationale** | The two-part policy balances customer convenience with trust model integrity.<br><br>For Server Certificates: AHPs can use existing public certificates for convenience, but the RA must still perform independent Domain Control Validation (e.g., ACME DNS-01) at registration. The certificate does not replace live validation. For wildcard certificates, the RA MUST still perform DCV on the specific FQDN (subdomain) used by the ANSName, even if the certificate covers the parent domain.<br><br>For Identity Certificates: The Private Identity Certificate represents the RA's attestation of a validated `ANSName`. Accepting third-party certificates would compromise the RA's role as trust root - like a notary signing an unwitnessed document. The RA must control issuance to maintain integrity. |
 
 ### 7.7 ADR 007: Multi-protocol agent support
 
 | Item | Description |
 | :--- | :--- |
 | **Context** | Agents often support multiple communication protocols (e.g., both conversational `a2a` and transactional `mcp`) from a single FQDN. The architecture must define how one agent identity represents multiple protocols. |
-| **Decision** | To balance a singular identity with functional flexibility, the following model is adopted:<br><br>1. **One Version, One ANSName`:** Each unique software version of an agent is represented by one and only one canonical `ANSName`. The AHP must designate a single "primary" protocol to be used in this identifier.<br><br>2. **Agent Card is Authoritative for Functionality:** The Agent Card is the sole authoritative source for the *complete list* of all supported protocols, endpoints, and capabilities.<br><br>3. **Schemas are External and Linked:** Each protocol listed in the `protocolExtensions` block of the Agent Card MUST link to its own canonical JSON Schema via a `schema` URL. |
-| **Rationale** | The model trades complete functional description in the `ANSName` for a singular cryptographic identity with one Identity Certificate. Functional complexity moves to the Agent Card, a richer and more flexible document. External linked schemas promote modularity and prevent bloat. The design favors unified identity and operational efficiency over separate FQDNs per protocol, though AHPs can still register multiple single-protocol agents if preferred. |
+| **Decision** | To balance a singular identity with functional flexibility, the following model is adopted:<br><br>1. One Version, One ANSName: Each unique software version of an agent is represented by one and only one canonical `ANSName`. The AHP must designate a single "primary" protocol to be used in this identifier.<br><br>2. Agent Card is Authoritative for Functionality:** The Agent Card is the sole authoritative source for the *complete list* of all supported protocols, endpoints, and capabilities.<br><br>3. Schemas are External and Linked: Each protocol listed in the `protocolExtensions` block of the Agent Card MUST link to its own canonical JSON Schema via a `schema` URL. |
+| **Rationale** | The model trades complete functional description in the `ANSName` for a singular cryptographic identity with one Identity Certificate. Functional complexity moves to the Agent Card, a richer and more flexible document. External linked schemas promote modularity and prevent bloat. The design favors unified identity and operational efficiency over separate FQDNs per protocol, though AHPs can still register multiple single-protocol agents if preferred. <br><br>While this architecture is protocol-agnostic, the viability of the ecosystem depends on dominant standards like A2A or a unified AI Card. The RA's schema integrity validation MUST provide robust, first-class support for validating the schemas of these dominant protocols. The RA's reference SDK should likewise prioritize integration with these protocols' SDKs to streamline AHP adoption. |
 
 ### 7.8 ADR 008: Detached signature storage requirement
 
@@ -817,6 +829,14 @@ The migration will be handled via a gradual, multi-step process that establishes
 | **Context** | A competitive ANS/RA marketplace requires unambiguous identification of each compliant RA for federated discovery, verification, and auditing. The `ANSName` must remain registrar-agnostic for agent portability and to prevent vendor lock-in. The operational `ra_id` is too granular. |
 | **Decision** | The Registrar ID (`registrar_id`) is a unique, stable, public string assigned to each approved RA (e.g., `ra-prime`). The `registrar_id` is excluded from the `ANSName`. It appears in the `_ra-badge` DNS record (as `registrar`) and in all Transparency Log event payloads to identify the originating RA. |
 | **Rationale** | This decouples agent identity from the current registrar. Agents move between RAs by updating DNS records (`url` and `registrar`) without changing the `ANSName`. This preserves identity portability while enabling federated routing and trust verification. The `registrar_id` serves as the Federation Registry primary key for a scalable, auditable multi-provider ecosystem. |
+
+### 7.12 ADR 012: Defining cryptographic consent for transactions
+
+| Item | Description |
+| :--- | :--- |
+| **Context** | In an autonomous agent economy, high-stakes interactions such as payments or data sharing require a non-repudiable authorization mechanism that replaces traditional human consent (e.g., clicking "I Agree"). |
+| **Decision** | Agent consent to execute a transaction is defined as an explicit, verifiable, cryptographic action. This consent MUST be captured as a JWS Detached Signature over the transaction's payload, such as the A2A/MCP message or x402 payment order. |
+| **Rationale** | This ADR formalizes that the PriCC is not just an authentication certificate but also the authorization instrument. The private key associated with the PriCC is the tool the agent uses to provide cryptographic consent. This mechanism ensures that any agent action can be forensically tied back to the specific, version-bound identity that authorized it, which is a mandatory requirement for legal and financial auditing. |
 
 ## 8.0 Non-functional requirements (NFRs)
 
@@ -914,23 +934,23 @@ The system's expected behavior during key component failures is described below.
   * Coordination with RA instances for key re-registration
 
 ### 9.2 Future work (planned enhancements)
-* Develop Component Registries for Standardization: Create and govern formal registries for `ANSName` components (like `capability`) to ensure long-term ecosystem health.
-* Granular ANSName Revocation: Introduce mechanisms to revoke only specific components of the `ANSName` (e.g., a single compromised capability) rather than the entire identity.
-* Automated Policy Engine: Externalize the RA's validation rules into a separate policy engine to improve maintainability.
-* Transparency Log Consistency Proofs: Implement RFC 6962-compliant consistency proofs to enable cryptographic verification that the log has not been tampered with between any two historical states.
-* Client SDK/CLI for High-Assurance Verification: Develop a lightweight client library (e.g., an `ans_verifier` package) for the end-to-end, high-assurance verification flow. The SDK handles the ANS-to-ANS mTLS handshake, DNS record lookups, real-time Badge status checks, and the full hash-chain validation (Agent Card and schemas). A simple, high-level function (e.g., `verifier.connect()`) abstracts security-critical complexity for AHP developers.
-* Define Formal Policy for Wildcard Certificates: Develop a comprehensive policy and risk assessment framework for the use of wildcard certificates. The policy must define whether wildcards are permissible for Server and/or Identity Certificates and what specific security controls are required.
-* Automated ANSName and Capability Suggestion: Develop an AI-driven feature to inspect an agent's code or documentation and automatically propose a compliant and accurate `ANSName` and capabilities list.
-* Automated Credential Rotation: Implement a fully automated, zero-downtime credential rotation mechanism for all external service integrations.
-* Develop First-Class Support for ZKP Attestations: Implement the standards and tooling required for Zero-Knowledge Proofs (ZKPs) as a fully supported feature. Define a standard schema for advertising ZKP-enabled capabilities within the Agent Card, enhance RA protocol adapters to validate this schema, and create developer SDKs for ZKP-based agent interactions.
-* Evolve to a Federated, Multi-RA Ecosystem: The single-RA model described is the necessary bootstrap phase for the ecosystem. The long-term architectural vision is a competitive, interoperable marketplace of hundreds of compliant RAs, as envisioned in the original IETF and OWASP drafts. This federated state requires the "Federated Trust Manager" mode of the ANS Trust Provisioner (see ADR 009) and governance by a new standards body (e.g., an "ANS Forum" analogous to the CA/B Forum). This body will maintain the central, secure Federation Registry and define the policies for RA compliance, creating an open standard.
-* Develop RA-to-RA Federation Protocol: The current architecture enables federated models via client-side trust. A resilient ecosystem requires formal server-side communication between registrars. Future work should define:
+* Develop component registries for standardization: Create and govern formal registries for `ANSName` components (like `capability`) to ensure long-term ecosystem health.
+* Granular ANSName revocation: Introduce mechanisms to revoke only specific components of the `ANSName` (e.g., a single compromised capability) rather than the entire identity.
+* Automated policy engine: Externalize the RA's validation rules into a separate policy engine to improve maintainability.
+* Transparency Log consistency proofs: Implement RFC 6962-compliant consistency proofs to enable cryptographic verification that the log has not been tampered with between any two historical states.
+* Client SDK/CLI for high-assurance verification: Develop a lightweight client library (e.g., an `ans_verifier` package) for the end-to-end, high-assurance verification flow. The SDK handles the ANS-to-ANS mTLS handshake, DNS record lookups, real-time Badge status checks, and the full hash-chain validation (Agent Card and schemas). A simple, high-level function (e.g., `verifier.connect()`) abstracts security-critical complexity for AHP developers.
+* Define formal policy for wildcard certificates: Develop a comprehensive policy and risk assessment framework for the use of wildcard certificates. The policy must define whether wildcards are permissible for Server and/or Identity Certificates and what specific security controls are required.
+* Automated ANSName and capability suggestion: Develop an AI-driven feature to inspect an agent's code or documentation and automatically propose a compliant and accurate `ANSName` and capabilities list.
+* Automated credential rotation: Implement a fully automated, zero-downtime credential rotation mechanism for all external service integrations.
+* Evolve to a federated, multi-RA ecosystem: The single-RA model described is the necessary bootstrap phase for the ecosystem. The long-term architectural vision is a competitive, interoperable marketplace of hundreds of compliant RAs, as envisioned in the original IETF and OWASP drafts. This federated state requires the "Federated Trust Manager" mode of the ANS Trust Provisioner (see ADR 009) and governance by a new standards body (e.g., an "ANS Forum" analogous to the CA/B Forum). This body will maintain the central, secure Federation Registry and define the policies for RA compliance, creating an open standard.
+* Develop RA-to-RA federation protocol: The current architecture enables federated models via client-side trust. A resilient ecosystem requires formal server-side communication between registrars. Future work should define:
     * Specialized communication channels: Distinct, prioritized channels for inter-registrar communication:
-        * Anchor Thread for critical security events (revocations)
-        * Signal Thread for eventually consistent data (policies, reputation)
-        * Probe Thread for health monitoring
+        * Anchor thread for critical security events (revocations)
+        * Signal thread for eventually consistent data (policies, reputation)
+        * Probe thread for health monitoring
     * Zero-trust identity: Secure federation using cryptographic workload identity standards like SPIFFE, replacing network-based controls with zero-trust security for the registrar network.
-* Support generic verifiable claims: Move beyond validating claimed capabilities to verifying how capabilities were built. This extensible approach avoids building support for specific claim types:
+* Develop first-class support for runtime integrity (ZKPs/TEEs): Implement standards for Zero-Knowledge Proofs (ZKPs) and Trusted Execution Environment (TEE) attestations. This is the long-term solution to close the "application integrity gap," allowing an agent to cryptographically prove its runtime code has not been tampered with, a guarantee layer 1 identity via the PriCC alone cannot provide.
+* Support generic verifiable claims (W3C VCs): To enable the layer 2 operational maturity ecosystem, the Agent Card schema MUST include an extensible field for W3C Verifiable Credentials (VCs). While the RA will use JWS for its own attestations, this field allows third-party auditors to issue VCs that are bound to the ANSName, enabling a competitive attestation market.
     * Agent Card extension: Add a generic verifiableClaims array to the Agent Card schema. Each entry contains a type (e.g., "AIBOMv1", "SOC2ComplianceProof"), a hash, and a url.
     * Attestation sealing: The RA hashes the entire Agent Card payload, including verifiableClaims, and seals it in the Transparency Log. This allows ecosystem innovation on verifiable evidence types while keeping the RA protocol focused on attestation.
 
