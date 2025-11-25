@@ -1,0 +1,45 @@
+---
+name: Lint
+
+on: 
+  push: 
+  pull_request:
+
+permissions: {}
+
+jobs:
+  build:
+    name: Lint
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+      packages: read
+      # To report GitHub Actions status checks
+      statuses: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+        with:
+          # super-linter needs the full git history to get the
+          # list of files that changed across commits
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Super-linter
+        uses: super-linter/super-linter@v8.2.1 # x-release-please-version
+        env:
+          # To report GitHub Actions status checks
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Default branch for comparison (only changed files are linted)
+          DEFAULT_BRANCH: main
+          # Only lint changed files for better performance
+          VALIDATE_ALL_CODEBASE: false
+          # Enable markdown linting (primary file type in this repo)
+          VALIDATE_MARKDOWN: true
+          # Enable YAML linting (for workflow files)
+          VALIDATE_YAML: true
+          # Generate GitHub Actions step summary for better visibility
+          ENABLE_GITHUB_ACTIONS_STEP_SUMMARY: true
+
