@@ -16,7 +16,7 @@ The Agent Name Service (ANS) solves this by anchoring every agent identity to a 
 
 This architecture builds on "Agent Name Service for Secure AI Agent Discovery" by Narajala, Huang, Habler, and Sheriff (OWASP). The design departs from that paper in several ways, motivated by production deployment at internet scale.
 
-The core design choices have independent corroboration from unrelated efforts. The Hedera ecosystem's HCS-14 standard independently arrived at DNS TXT records for agent discovery, using `_agent.<nativeId>` as the record name. What began as independent convergence is now active collaboration: GoDaddy is working with the HCS-14 working group to define an ANS Profile within HCS-14, so that resolvers can verify ANS DNS records, certificates, and log proofs through a standard interface without ANS-specific branching. A companion effort will define a Merkle Tree Registry specification under HCS-2, anchoring periodic ANS Transparency Log roots to a public distributed ledger for independently verifiable timestamps. The IETF's SCITT working group (Supply Chain Integrity, Transparency and Trust), whose core architecture draft is in the RFC Editor Queue, defines an append-only transparency log with signed statements and receipts that maps closely to the ANS Transparency Log. Google's A2A and Anthropic's MCP, now consolidating under the Linux Foundation, define agent communication but explicitly defer identity and discovery to external infrastructure. The convergence of these independent efforts on the same structural gap corroborates the design direction.
+The core design choices have independent corroboration from unrelated efforts. The Hedera ecosystem's HCS-14 standard independently arrived at DNS TXT records for agent discovery, using `_agent.<nativeId>` as the record name. What began as independent convergence is now active collaboration: GoDaddy is working with the HCS-14 working group to define an ANS Profile within HCS-14, so that resolvers can verify ANS DNS records, certificates, and log proofs through a standard interface without ANS-specific branching. A companion effort will define a Merkle Tree Registry specification under HCS-2, anchoring periodic ANS Transparency Log roots to a public distributed ledger for independently verifiable timestamps. The IETF's SCITT working group (Supply Chain Integrity, Transparency and Trust), whose core architecture draft is in the RFC Editor Queue, defines an append-only transparency log with signed statements and receipts that maps closely to the ANS Transparency Log. Google's A2A and Anthropic's MCP, now consolidating under the Linux Foundation, define agent communication but explicitly defer identity and discovery to external infrastructure. The convergence of these independent efforts on the same structural gap corroborates the design direction. The enhanced design documented here, including the dual-certificate model, version-bound lifecycle, DNS trust anchors, and event-driven transparency, is being contributed to the IETF as an internet-draft (draft-narajala-ans), formalizing ANS as an open specification rather than a single-vendor architecture.
 
 ### 1.3 Foundational principles
 
@@ -85,7 +85,7 @@ Three security domains meet at the Registration Authority.
 
 The **Agent Platform Domain** contains the Agent Hosting Platform and the public-facing DNS Provider. The **Trust Authority Domain** contains the Key Management System, the Transparency Log, and the Provider Registry. The **Certificate Domain** contains both the Public and Private Certificate Authorities.
 
-![High-Level Component Diagram of the ANS Registry Ecosystem](component-diagram.png)
+<img src="diagrams/component-diagram.drawio.png" alt="High-Level Component Diagram of the ANS Registry Ecosystem" width="100%">
 
 *Figure 1. Component diagram. Three security domains meet at the RA: the Agent Platform (red), the Trust Authority (blue), and shared infrastructure (yellow). The Third-Party Ecosystem (green) consumes events and fetches Agent Cards.*
 
@@ -253,7 +253,7 @@ The data flows mechanically through two paths. **Registration-time claims** ente
 
 **3.4.1 Discovery service:**
 
-Third-party applications at layer 3 consume the RA's Pub/Sub feed to build searchable agent indexes accessible through their own UI and API.
+Third-party applications at layer 3 build searchable agent indexes accessible through their own UI and API. Integration paths include real-time subscription to the event stream (§3.3.2.2) and scheduled scanning via the RA's public query API.
 
 **3.4.2 ANS Monitoring Service:**
 
@@ -277,9 +277,9 @@ The SDKs (Java, Go, Python) and the CLI are the interface between the AHP develo
 
 **3.6.1 Protocol adapter layer.**
 
-The RA accepts a single registration payload format (§6.1.1). Agent protocols define their own metadata structures: A2A has an Agent Card, MCP has a tool manifest, HTTP_API may have an OpenAPI document. The SDK's protocol adapter translates these native formats into the ANS registration payload.
+The RA accepts a single registration payload format (§6.1.1). Agent protocols define their own metadata structures: A2A has an Agent Card, MCP has a tool manifest, HTTP-API may have an OpenAPI document. The SDK's protocol adapter translates these native formats into the ANS registration payload.
 
-Each adapter extracts the fields the RA needs (endpoints, capabilities, schema URLs) from the protocol's native metadata. The developer points the SDK at an existing configuration file or URL. The adapter reads it, constructs the ANS registration payload, and optionally assembles the `agentCardContent` block from the native source. The developer does not write ANS-specific metadata by hand.
+Each adapter extracts the fields the RA needs (endpoints, schema URLs) from the protocol's native metadata. The developer points the SDK at an existing configuration file or URL. The adapter reads it, constructs the ANS registration payload, and optionally assembles the `agentCardContent` block from the native source. The developer does not write ANS-specific metadata by hand.
 
 The adapter also works in reverse. When the SDK receives a registration response, it can generate protocol-native files (for instance, an A2A Agent Card augmented with ANS trust fields) for the AHP to serve.
 
@@ -308,7 +308,7 @@ In the federated phase (§9.3), the Trust Provisioner retrieves a trust bundle f
 
 ### 4.1 The ANSName
 
-An ANSName is the canonical identifier for a registered agent. It has three components, bound by the protocol prefix `ans://`. The format decouples identity from protocol: an agent can support A2A, MCP, and HTTP_API simultaneously without changing its name.
+An ANSName is the canonical identifier for a registered agent. It has three components, bound by the protocol prefix `ans://`. The format decouples identity from protocol: an agent can support A2A, MCP, and HTTP-API simultaneously without changing its name.
 
 **Canonical Format:** `ans://v{version}.{agentHost}`
 
@@ -447,6 +447,8 @@ An agent's `agent_state` progresses through a defined set of states. Each transi
 | `REVOKED` | Explicitly revoked; identity certificates invalidated |
 | `EXPIRED` | Registration validity expired; requires renewal |
 
+The API layer exposes finer-grained states for client-facing responses. `PENDING_VALIDATION` appears while an external domain's ACME challenge is outstanding. `PENDING_CERTS` appears while certificate issuance is in progress. `FAILED` appears when DNS verification finds missing certificates. These are computed at query time by the delegate layer; the domain model stores only `PENDING`. The `RegistrationPending` object in the API response carries one of these substates along with `nextSteps` that tell the client what action to take.
+
 **Transitions:**
 
 - `PENDING` → `PENDING_DNS` (domain control validated, DNS records provisioned)
@@ -461,7 +463,7 @@ A registration in `PENDING` or `PENDING_DNS` can be cancelled before activation.
 
 Revocation is idempotent: revoking an already-revoked registration is a no-op.
 
-![State Machine Diagram of the Agent Registration Lifecycle](state-machine-diagram.png)
+<img src="diagrams/state-machine.drawio.png" alt="State Machine Diagram of the Agent Registration Lifecycle" width="100%">
 
 *Figure 2. Agent state lifecycle. PENDING_DNS is the normal intermediate state for external domains; internal domains with automated DNS skip directly to ACTIVE. Cancellation (dashed lines) removes artifacts without producing a TL event. REVOKED and EXPIRED are terminal.*
 
@@ -523,8 +525,8 @@ To prevent circular dependencies when signatures are stored within JSON objects:
    ```json
    {
      "event": {
-       "type": "registered",
-       "ans_name": "...",
+       "eventType": "AGENT_REGISTERED",
+       "ansName": "...",
        "producer_signature": "..."  // Signs the event minus this field
      },
      "batch_signature": "..."       // Signs the entire event object
@@ -549,7 +551,9 @@ A client connecting to an agent can perform several independent verification ste
 
 **Step 3: Transparency Log verification.** The client verifies that the presented certificate fingerprint matches the one recorded in the Transparency Log at registration. The TL already stores this fingerprint as part of the sealed attestation. This check uses a third trust channel (the TL's immutable Merkle tree, signed by the KMS). The current implementation uses Trust On First Use (TOFU), where the client caches the fingerprint locally on first contact. This is being superseded by TL-Backed Verification, where the client queries the TL directly. TL-Backed Verification removes the dependency on persistent local storage, making it suitable for ephemeral cloud environments (containers, serverless) where local state does not survive restarts.
 
-For convenience in human communication and in the Trust Index scoring model, these steps map to named tiers: **Bronze** (step 1 only), **Silver** (steps 1-2), and **Gold** (steps 1-3). Agents making trust decisions operate on the specific verification artifacts, not the tier labels. The tier is a summary for human readers, like a diploma's honors designation. The artifacts listed on the diploma are what matter.
+Three tiers name these steps for human shorthand: **Bronze** (step 1 only), **Silver** (steps 1-2), and **Gold** (steps 1-3). Three, not more. Classification systems that work for humans top out at three: traffic lights, medal podiums, credit ratings compressed to good/fair/poor. Future verification steps (like the HCS-27 public checkpoint in HCS_INTEGRATION_PROPOSAL.md) strengthen Gold by adding non-repudiation, but they do not create new tiers. The Trust Index captures the difference as a numeric signal in the integrity dimension; the badge stays Gold.
+
+The tier describes what the *client* verified, not a property the RA assigned to the agent. An agent does not "have" a tier. A client *performed* a tier's worth of verification. Two clients connecting to the same agent may reach different tiers depending on what checks they run. The Trust Index records the highest tier its crawlers achieved during evaluation (see TRUST_INDEX_ARCHITECTURE.md, Trust Manifest `verificationTier` field), but that record reflects the evaluator's verification depth, not a label on the agent itself.
 
 **Implementation.** The Java SDK implements all three tiers via `GoldTierTrustManager.java`. The current Gold implementation uses TOFU; TL-Backed Verification is in development. The Go SDK provides CLI tooling for Bronze and Silver verification.
 
@@ -563,13 +567,13 @@ The RA provisions one `_ans-badge` TXT record per ACTIVE version, pointing to th
 **Record format:**
 
 ```
-_ans-badge.{agentHost} IN TXT "v=ans-badge1; version=v1.0.0; url=https://transparency.ra.ansregistry.com/v1/agents/{agentId}"
+_ans-badge.{agentHost} IN TXT "v=ans-badge1; version=1.0.0; url=https://transparency.ra.ansregistry.com/v1/agents/{agentId}"
 ```
 
 | Field | Required | Description |
 | :--- | :--- | :--- |
 | `v` | Yes | Format version. Always `ans-badge1`. |
-| `version` | Yes | The agent version this badge represents, matching the version component of the ANSName (e.g., `v1.0.0`). Enables verifiers to select the correct badge when multiple ACTIVE versions coexist. |
+| `version` | Yes | Simplified semver string (e.g., `1.0.0`) identifying the agent version this badge represents. Same format as the `_ans` record's `version` field (§5.5.1). Enables verifiers to select the correct badge when multiple ACTIVE versions coexist. |
 | `url` | Yes | URL to fetch the badge from the Transparency Log. |
 | `registrar` | No | Registrar ID of the issuing RA (ADR 011). Reserved for federated multi-RA deployments (§9.3). |
 
@@ -613,36 +617,39 @@ The `_ans` TXT record is a connection hint published in DNS. It tells the client
 | Field | Required | Description |
 | :--- | :--- | :--- |
 | `v` | Yes | Schema version. Always `ans1` for this specification. |
+| `version` | Yes | Simplified semver string (e.g., `1.0.0`) identifying which agent version this record belongs to. Multiple versions of the same agent can be active at the same FQDN simultaneously (see **Version coexistence** below). |
 | `p` | No | Protocol dialect for this entry: `a2a`, `mcp`, `http`. When omitted, the record applies to any protocol. |
 | `url` | No | URL to the metadata file or endpoint. When omitted and `mode` is not `direct`, clients fall back to `/.well-known/agent-card.json` at the FQDN. |
 | `mode` | No | `card` (default): client fetches the file at `url`. `direct`: client connects to the FQDN without fetching a static file. |
 
-**Multiple records.** An FQDN may have multiple `_ans` TXT records, one per protocol. Clients filter by the `p` field and select the entry matching their capabilities.
+**Version coexistence.** An agent hosting platform may run version 2.0.0 of an agent alongside version 1.0.0 at the same FQDN, for example during a rolling upgrade or an A/B test. Each active version gets its own `_ans` TXT record. A query for `_ans.example.com` may therefore return several records with different `version` values. When a version is revoked (§6.4), the RA matches on the `version` field to remove that version's records without disturbing the others.
+
+**Multiple protocols.** An FQDN may also have multiple records per version when the agent speaks more than one protocol. Clients filter by the `p` field and select the entry matching their capabilities.
 
 **Four configurations:**
 
 *Static card.* The agent hosts a metadata file at a URL it controls.
 ```
-_ans   IN   TXT   "v=ans1; url=https://agent.example.com/.well-known/agent-card.json"
+_ans   IN   TXT   "v=ans1; version=1.0.0; url=https://agent.example.com/.well-known/agent-card.json"
 ```
 The RA fetches the file, hashes it, and seals the hash into the TL.
 
 *Dynamic / direct.* The agent is code behind an API gateway. There is no static file to fetch.
 ```
-_ans   IN   TXT   "v=ans1; p=mcp; mode=direct"
+_ans   IN   TXT   "v=ans1; version=1.0.0; p=mcp; mode=direct"
 ```
 The client connects via the protocol handshake to the FQDN's A/AAAA address. The RA records a null hash (the agent is active but has no static card to verify).
 
 *SaaS delegate.* The agent runs on a platform like Salesforce. The metadata lives on the provider's domain.
 ```
-_ans   IN   TXT   "v=ans1; url=https://agentforce.salesforce.com/agents/v1/metadata/0014x"
+_ans   IN   TXT   "v=ans1; version=2.1.0; url=https://agentforce.salesforce.com/agents/v1/metadata/0014x"
 ```
 The RA fetches and hashes the remote file.
 
 *Multi-protocol.* The agent speaks multiple protocols. Each gets its own record.
 ```
-_ans   IN   TXT   "v=ans1; p=a2a; mode=direct"
-_ans   IN   TXT   "v=ans1; p=mcp; url=https://api.example.com/mcp-tools.json"
+_ans   IN   TXT   "v=ans1; version=1.0.0; p=a2a; mode=direct"
+_ans   IN   TXT   "v=ans1; version=1.0.0; p=mcp; url=https://api.example.com/mcp-tools.json"
 ```
 An A2A client ignores the MCP record and connects directly. An MCP client ignores the A2A record and fetches the manifest. A generic crawler that matches no specific protocol falls back to the record without a `p` field, if one exists.
 
@@ -650,9 +657,10 @@ An A2A client ignores the MCP record and connects directly. An MCP client ignore
 
 1. Queries all `_ans` TXT records for the FQDN.
 2. Filters by `p={target_protocol}`. If no match, selects records with no `p` field.
-3. If `mode=direct`: connect to the FQDN. No file to fetch.
-4. If `url` is present: fetch the file at that URL.
-5. If neither `url` nor `mode=direct`: attempt `/.well-known/agent-card.json` as a fallback.
+3. If multiple versions remain after filtering, selects the record with the highest `version` value (semver ordering). A client that needs a specific version may select by exact match instead.
+4. If `mode=direct`: connect to the FQDN. No file to fetch.
+5. If `url` is present: fetch the file at that URL.
+6. If neither `url` nor `mode=direct`: attempt `/.well-known/agent-card.json` as a fallback.
 
 ### 5.6 Coexistence with other trust models
 ANS is a foundational identity layer, not a replacement for existing authentication schemes. An agent at a stable FQDN can support multiple authentication protocols simultaneously.
@@ -672,8 +680,8 @@ The multi-level signature pattern looks like this:
 ```json
 {
   "event": {
-    "type": "registered",
-    "ans_name": "...",
+    "eventType": "AGENT_REGISTERED",
+    "ansName": "...",
     "producer_signature": "...",  // Included but not publicly verifiable
     "producer_key_id": "..."      // For forensic reference
   },
@@ -687,7 +695,7 @@ The multi-level signature pattern looks like this:
 For internal verification, the TL validates producer signatures using keys from an internal registry. For public verification, anyone can verify tree signatures using the TL's published keys. Producer signatures are included in responses for record completeness but do not need to be verified externally. This separation keeps the public verification path simple while preserving forensic detail.
 
 ### 5.8 Private vs. public audit trails
-The system maintains two logs. The private operational log lives in the RA's internal database, recording fine-grained milestones (`domain_validation_complete`, `certificate_issued`) for debugging and forensic analysis. The public Transparency Log records only finalized state changes (`ra_badge_created`, `agent_revoked`, `agent_renewed`) in an immutable, cryptographically verifiable ledger.
+The system maintains two logs. The private operational log lives in the RA's internal database, recording fine-grained milestones (`domain_validation_complete`, `certificate_issued`) for debugging and forensic analysis. The public Transparency Log records only finalized state changes (`AGENT_REGISTERED`, `AGENT_REVOKED`, `AGENT_RENEWED`) in an immutable, cryptographically verifiable ledger.
 
 ### 5.9 Producer key management
 
@@ -735,7 +743,7 @@ sequenceDiagram
 
     autonumber
     Note over AHP,Discovery: Registration Request
-    AHP->>RA: POST /register<br/>(Request Payload)
+    AHP->>RA: POST /agents/register<br/>(Request Payload)
     activate RA
     RA-->>AHP: 202 Accepted
     deactivate RA
@@ -787,12 +795,12 @@ The AHP submits a registration request via `POST` to the RA's Lifecycle Manageme
     - `version` (required): Semantic version string (e.g., "1.0.0")
     - `agentHost` (required): Complete FQDN serving as the agent's persistent identifier (e.g., "sentiment-analyzer.example.com")
   * **Endpoint Configuration** (required): Array of protocol-specific endpoints (minimum 1), where each endpoint specifies:
-    - `protocol` (required): One of `A2A`, `MCP`, or `HTTP_API`
+    - `protocol` (required): One of `A2A`, `MCP`, or `HTTP-API`
     - `agentUrl` (required): The actual endpoint URL
     - `metadataUrl` (optional): Link to protocol metadata (e.g., `/.well-known/mcp.json`)
     - `documentationUrl` (optional): Link to developer documentation
-    - `functions` (optional): Array of function declarations for this protocol
-    - `transports` (optional): Ordered set of supported transport mechanisms. Values: `STREAMABLE_HTTP`, `SSE`, `JSON_RPC`, `GRPC`, `REST`, `HTTP`. When omitted, clients infer transport from the protocol.
+    - `functions` (optional): Array of function declarations for this protocol. Each function has an `id`, a `name`, and optional `tags` for categorization. Full function schemas (parameter types, descriptions) live in the protocol-specific metadata at the `metadataUrl`.
+    - `transports` (optional): Ordered set of supported transport mechanisms. Values: `STREAMABLE-HTTP`, `SSE`, `JSON-RPC`, `GRPC`, `REST`, `HTTP`. When omitted, clients infer transport from the protocol.
   * **Cryptographic Materials:**
     - `identityCsrPEM` (required): CSR for version-bound Identity Certificate
     - `serverCertificatePEM` (optional): BYOC server certificate, OR
@@ -819,7 +827,7 @@ a. **Certificate issuance.** The RA obtains the version-bound Identity Certifica
 
 b. **DNS provisioning.** The RA publishes the agent's DNS records (`HTTPS`, `TLSA`, `_ans`, `_ans-badge`). The RA constructs each `_ans` record from the registration payload: `mode=card` with the `metadataUrl` when one was provided, `mode=direct` otherwise. If the registration includes multiple endpoints with different protocols, the RA publishes one `_ans` record per protocol with the appropriate `p=` field (see §5.5.1). The RA publishes one `_ans-badge` record for this version, including the `version=` field (see §5.2.1). If other versions are already ACTIVE, their `_ans-badge` records remain; the new record is added alongside them. If the AHP provided an `echConfigList`, the HTTPS record includes the `ech=` parameter.
 
-c. **Event payload generation.** If the AHP submitted `agentCardContent`, the RA hashes that content (including any `verifiableClaims`) and stores the hash as the authoritative fingerprint for AIM integrity checks. If no card content was submitted, the RA records the Agent Card URL without a hash. The AIM will fetch and hash the live card after activation (§6.8). In both cases, the RA extracts a lightweight summary (description, capabilities, claim types) for the event's `meta` object.
+c. **Event payload generation.** If the AHP submitted `agentCardContent`, the RA hashes that content (including any `verifiableClaims`) and stores the hash as the authoritative fingerprint for AIM integrity checks. If no card content was submitted, the RA records the Agent Card URL without a hash. The AIM will fetch and hash the live card after activation (§6.8). In both cases, the RA extracts a lightweight summary (description, claim types) for the event's `meta` object.
 
 d. **Log sealing (point of no return).** The RA submits the signed event payload to the Transparency Log, where it is batched, sealed into the Merkle tree, and made immutable.
 
@@ -831,7 +839,7 @@ f. **Public notification.** The RA publishes the event payload to the Pub/Sub sy
 * **AHP to RA.** Registration request JSON payload.
 * **RA to external services.** Validation requests to CAs and DNS providers.
 * **RA to AHP.** Validation challenges, status updates, issued certificates, and `log_id`.
-* **RA to Pub/Sub.** The `agent_registered` event payload.
+* **RA to Pub/Sub.** The `AGENT_REGISTERED` event payload.
 
 ### 6.2 Agent update/version bump
 Any code change triggers a complete re-registration. Even fixing a typo in the Agent Card requires a new version number and a new Identity Certificate. The old version remains ACTIVE while the new one is validated.
@@ -879,7 +887,7 @@ sequenceDiagram
     AHP->>AHP: Code/Config Change<br/>v1.0.0 → v1.0.1
 
     Note over AHP,RA: Step 2: New Registration Request
-    AHP->>RA: POST /register<br/>(New ANSName v1.0.1<br/>+ Identity CSR)
+    AHP->>RA: POST /agents/register<br/>(New ANSName v1.0.1<br/>+ Identity CSR)
     activate RA
     Note right of RA: Alternatively, the Identity CSR<br/>can be submitted later<br/>in a separate call
     RA->>RA: Identify the previous<br/>version by FQDN
@@ -937,14 +945,14 @@ sequenceDiagram
 *Figure 5: Sequence Diagram of the Agent Update/Version Bump Flow*
 
 ### 6.3 Agent renewal
-Renewal applies when an Identity Certificate approaches expiration but the agent code has not changed. The AHP submits a new CSR for the same ANSName with no version increment. The RA re-validates, issues a fresh Identity Certificate, and seals an `agent_renewed` event into the log.
+Renewal applies when an Identity Certificate approaches expiration but the agent code has not changed. The AHP submits a new CSR for the same ANSName with no version increment. The RA re-validates, issues a fresh Identity Certificate, and seals an `AGENT_RENEWED` event into the log.
 
 ### 6.4 Agent deregistration/revocation
-When an agent shuts down permanently, the AHP sends a revocation request to the RA with an RFC 5280 reason code (`KEY_COMPROMISE`, `CESSATION_OF_OPERATION`, `AFFILIATION_CHANGED`, `SUPERSEDED`, `CERTIFICATE_HOLD`, `PRIVILEGE_WITHDRAWN`, or `AA_COMPROMISE`) and optional comments. The RA immediately revokes the Identity Certificate at the Private CA and seals an `agent_revoked` event into the Transparency Log. The revocation takes effect within minutes through OCSP/CRL distribution.
+When an agent shuts down permanently, the AHP sends a revocation request to the RA with an RFC 5280 reason code (`KEY_COMPROMISE`, `CESSATION_OF_OPERATION`, `AFFILIATION_CHANGED`, `SUPERSEDED`, `CERTIFICATE_HOLD`, `PRIVILEGE_WITHDRAWN`, or `AA_COMPROMISE`) and optional comments. The RA immediately revokes the Identity Certificate at the Private CA and seals an `AGENT_REVOKED` event into the Transparency Log. The revocation takes effect within minutes through OCSP/CRL distribution.
 
-DNS cleanup differs based on domain management. Because `_ans-badge` records are version-specific (§5.2.1), the RA always removes the revoked version's `_ans-badge` record. The shared records (`HTTPS`, `TLSA`, `_ans`) are removed only when no ACTIVE registrations remain for the FQDN.
-- **RA-managed domains (internal):** The RA removes the revoked version's `_ans-badge` record immediately. It removes the shared DNS records (`HTTPS`, `TLSA`, `_ans` TXT) via background jobs once the last ACTIVE registration for the FQDN is revoked or expired. If the revoked version was the only one supporting a given protocol, the RA also removes that protocol's `_ans` record.
-- **Externally-managed domains:** The revocation response always includes the revoked version's `_ans-badge` record in the `dnsRecordsToRemove` array. When the last ACTIVE registration is revoked, the array also includes all shared records (`HTTPS`, `TLSA`, `_ans`). Each record includes the name, type, value, and purpose (`DISCOVERY`, `TRUST`, `CERTIFICATE_BINDING`, `BADGE`). The AHP is responsible for executing the DNS cleanup.
+DNS cleanup differs based on domain management. Both `_ans` and `_ans-badge` records are version-specific (§5.5.1, §5.2.1), so the RA removes the revoked version's records immediately. The shared records (`HTTPS`, `TLSA`) are removed only when no ACTIVE registrations remain for the FQDN.
+- **RA-managed domains (internal):** The RA removes the revoked version's `_ans` and `_ans-badge` records immediately. It removes the shared DNS records (`HTTPS`, `TLSA`) via background jobs once the last ACTIVE registration for the FQDN is revoked or expired.
+- **Externally-managed domains:** The revocation response includes the revoked version's `_ans` and `_ans-badge` records in the `dnsRecordsToRemove` array. When the last ACTIVE registration is revoked, the array also includes the shared records (`HTTPS`, `TLSA`). Each record includes the name, type, value, and purpose (`DISCOVERY`, `TRUST`, `CERTIFICATE_BINDING`, `BADGE`). The AHP is responsible for executing the DNS cleanup.
 
 ### 6.5 DNS management roles
 
@@ -967,8 +975,8 @@ support.api   IN  A      192.0.2.50
 ; RA provisions these:
 support.api            IN  HTTPS 1 . alpn="h2"
 _443._tcp.support.api  IN  TLSA  3 0 1 abc123...
-_ans.support.api       IN  TXT   "v=ans1; mode=card; url=..."
-_ans-badge.support.api IN  TXT   "v=ans-badge1; version=v1.0.0; url=..."
+_ans.support.api       IN  TXT   "v=ans1; version=1.0.0; url=..."
+_ans-badge.support.api IN  TXT   "v=ans-badge1; version=1.0.0; url=..."
 ```
 
 **Cloud provider with CNAME.** The agent runs on a cloud platform (Salesforce, AWS, Heroku) that provides a dynamic hostname. The enterprise points a CNAME to that hostname. A DNS CNAME record cannot coexist with other record types at the same name (RFC 1034 §3.6.2). The RA detects the CNAME and skips the HTTPS record. The agent works, but ECH privacy is unavailable because the HTTPS record cannot carry the `ech=` parameter.
@@ -978,8 +986,8 @@ _ans-badge.support.api IN  TXT   "v=ans-badge1; version=v1.0.0; url=..."
 support.api   IN  CNAME  production-123.force.com.
 
 ; RA provisions these (no HTTPS record due to CNAME conflict):
-_ans.support.api       IN  TXT   "v=ans1; url=..."
-_ans-badge.support.api IN  TXT   "v=ans-badge1; version=v1.0.0; url=..."
+_ans.support.api       IN  TXT   "v=ans1; version=1.0.0; url=..."
+_ans-badge.support.api IN  TXT   "v=ans-badge1; version=1.0.0; url=..."
 _443._tcp.support.api  IN  TLSA  3 0 1 abc123...
 ```
 
@@ -995,8 +1003,8 @@ support.api   IN  CNAME  lb.herokuapp.com.
 support.api            IN  A      104.21.55.1
 support.api            IN  HTTPS  1 . alpn="h2"
 _443._tcp.support.api  IN  TLSA   3 0 1 abc123...
-_ans.support.api       IN  TXT    "v=ans1; mode=card; url=..."
-_ans-badge.support.api IN  TXT    "v=ans-badge1; version=v1.0.0; url=..."
+_ans.support.api       IN  TXT    "v=ans1; version=1.0.0; url=..."
+_ans-badge.support.api IN  TXT    "v=ans-badge1; version=1.0.0; url=..."
 ```
 
 The distinction between corporate DNS (the enterprise's internal zone infrastructure) and managed DNS (a provider hosting customer zones with API access) also affects the registration flow. When the enterprise's corporate DNS team must provision records manually, ACME DNS-01 requires coordination between the RA and a human operator. When the DNS provider offers API access (Domain Connect or direct API), the RA can automate provisioning. The design supports both: §6.1.2 defines DNS-01 as the default and HTTP-01 as the fallback for domains where the RA cannot automate DNS writes.
@@ -1174,6 +1182,16 @@ The RA removes the `ech=` parameter from the HTTPS record, reverting to protocol
 | **Decision** | The TL supports explicit schema versioning. V1 uses camelCase field names and UPPERCASE event types (e.g., `"AGENT_REGISTERED"`, `"AGENT_REVOKED"`). Clients request a specific schema version via the `/v1/log/schema/{schemaVersion}` endpoint or the `X-Schema-Version` request header. The TL translates between schemas at the API boundary; internal storage remains canonical. |
 | **Rationale** | Explicit versioning avoids silent breaking changes for consumers. UPPERCASE event types are unambiguous and match enum conventions in Kotlin, Go, and Java SDKs. The API-boundary translation pattern keeps storage independent of presentation, allowing future schema versions without data migration. V0 remains supported indefinitely for backward compatibility. |
 
+*ADRs 015–018 are defined in SCITT_MIGRATION_PROPOSAL.md (015, 016) and HCS_INTEGRATION_PROPOSAL.md (017, 018).*
+
+### 7.19 ADR 019: Removing `meta.capabilities` from event payloads
+
+| Item | Description |
+| :--- | :--- |
+| **Context** | PR #98 (October 2025) added protocol adapters that extracted function names from Agent Cards and flattened them into a `meta.capabilities` array in event payloads. The intent was to let downstream consumers search for agents by function. In production the field shipped as `emptyList()` in every event, because each protocol defines its functions differently. A2A calls them `skills`, MCP calls them `tools`, and neither list maps onto the other. The word "capabilities" itself collides with A2A's own `capabilities` object, which describes protocol-level features (streaming, push notifications), not agent functions. A single flattened array cannot carry these distinctions. |
+| **Decision** | The RA does not collect, populate, or publish a `meta.capabilities` array in event payloads. The `ansCapabilities` field remains in the Kotlin event-detail classes as an always-empty list for wire-format stability. Function-based discovery is the responsibility of the Trust Index, which reads protocol-specific definitions directly from the Agent Card's `protocolExtensions` block (ADR 007). |
+| **Rationale** | The Agent Card already carries the authoritative function list for each protocol. Copying a subset into the event payload duplicated data, lost protocol context, and created a naming collision with A2A. The Trust Index parses `skills`, `tools`, and future protocol-extension formats natively, preserving the distinctions that a flat array erased. Removing the field from the event payload eliminates a source of confusion without losing information the Trust Index does not already have. |
+
 ## 8.0 Non-functional requirements (NFRs)
 
 ### 8.1 Operational requirements (performance and availability)
@@ -1260,7 +1278,7 @@ The RA removes the `ech=` parameter from the HTTPS record, reverting to protocol
 ### 9.2 Recently implemented (moved from future work)
 * ~~Transparency Log consistency proofs~~: **Implemented.** The TL now supports RFC 6962-compliant consistency proofs via the Tessera tile-based architecture. Proofs are available through the `/.tlog/` endpoints (see §3.3.1.1).
 * ~~Client SDK/CLI for high-assurance verification~~: **Implemented.** The Java SDK provides `GoldTierTrustManager.java` with TOFU-based Gold Tier verification (being superseded by TL-Backed Verification, see §5.1.1), certificate chain validation, and DANE/TLSA checking. The Go SDK includes CLI tooling for Bronze and Silver tier verification. Both SDKs are actively maintained.
-* ~~Component registries for ANSName standardization~~: **Superseded.** The ANSName simplification to `ans://v{version}.{agentHost}` (3 components) eliminated the need for formal component registries. The earlier 7-component format had components like `capability` that required governance; the current format uses only version and host FQDN.
+* ~~Component registries for ANSName standardization~~: **Superseded.** The ANSName simplification to `ans://v{version}.{agentHost}` (3 components) eliminated the need for formal component registries. The earlier six-component format had components like `capability` that required governance; the current format uses only version and host FQDN.
 
 ### 9.3 Future work
 
@@ -1346,11 +1364,12 @@ The JSON payload submitted by an AHP to the RA's `/register` endpoint. This is t
       "agentUrl": "wss://support-agent.my-support-co.com/a2a",
       "metadataUrl": "https://support-agent.my-support-co.com/.well-known/a2a-metadata.json",
       "documentationUrl": "https://developer.my-support-co.com/docs/a2a",
-      "transports": ["STREAMABLE_HTTP", "SSE"],
+      "transports": ["STREAMABLE-HTTP", "SSE"],
       "functions": [
         {
-          "name": "lookupOrder",
-          "description": "Looks up order details in a conversational flow"
+          "id": "lookupOrder",
+          "name": "Lookup Order",
+          "tags": ["order", "support"]
         }
       ]
     },
@@ -1359,11 +1378,12 @@ The JSON payload submitted by an AHP to the RA's `/register` endpoint. This is t
       "agentUrl": "https://support-agent.my-support-co.com/mcp",
       "metadataUrl": "https://support-agent.my-support-co.com/.well-known/mcp-metadata.json",
       "documentationUrl": "https://developer.my-support-co.com/docs/mcp",
-      "transports": ["STREAMABLE_HTTP"],
+      "transports": ["STREAMABLE-HTTP"],
       "functions": [
         {
-          "name": "getTicketStatus",
-          "description": "Gets the status of a support ticket transactionally"
+          "id": "getTicketStatus",
+          "name": "Get Ticket Status",
+          "tags": ["ticket", "support"]
         }
       ]
     }
@@ -1407,16 +1427,9 @@ The metadata file hosted by the AHP at the URL specified in an `_ans` DNS record
       "documentationUrl": "https://developer.my-support-co.com/docs/a2a",
       "functions": [
         {
-          "name": "lookupOrder",
-          "description": "Looks up order details in a conversational flow.",
-          "parameters": {
-            "type": "object",
-            "properties": {
-              "orderId": {"type": "string"},
-              "customerEmail": {"type": "string"}
-            },
-            "required": ["orderId"]
-          }
+          "id": "lookupOrder",
+          "name": "Lookup Order",
+          "tags": ["order", "support"]
         }
       ]
     },
@@ -1427,15 +1440,9 @@ The metadata file hosted by the AHP at the URL specified in an `_ans` DNS record
       "documentationUrl": "https://developer.my-support-co.com/docs/mcp",
       "functions": [
         {
-          "name": "getTicketStatus",
-          "description": "Gets the status of a support ticket transactionally.",
-          "parameters": {
-            "type": "object",
-            "properties": {
-              "ticketId": {"type": "string"}
-            },
-            "required": ["ticketId"]
-          }
+          "id": "getTicketStatus",
+          "name": "Get Ticket Status",
+          "tags": ["ticket", "support"]
         }
       ]
     }
@@ -1477,149 +1484,126 @@ The metadata file hosted by the AHP at the URL specified in an `_ans` DNS record
 - Added `verifiableClaims` array for third-party attestation references (§3.2.2). Each entry has `type`, `issuer`, `hash`, `url`, and timestamps. The array is optional; agents without claims omit it
 
 ### A.3 Pub/Sub event payload (registration)
-The event payload published by the RA on successful registration. This same object is sealed into the Transparency Log and accessible via the Audit Log Viewer.
 
-**Note on schema versioning:** This example uses V1 event types (UPPERCASE, e.g., `"AGENT_REGISTERED"`) but retains V0 field naming (`snake_case`) in the top-level event fields. The `meta` block uses V1 `camelCase`. The TL supports both schemas via the `/v1/log/schema/{schemaVersion}` endpoint and `X-Schema-Version` request header. A fully V1-native example would use camelCase throughout.
+The RA publishes two things on successful registration: an event request to the Transparency Log, and a notification to Pub/Sub consumers. The Pub/Sub message wraps the event with a `logId` (assigned by the TL when it accepts the entry) and a `schemaVersion`. The Pub/Sub payload is not identical to the TL event request; the RA reshapes the event for downstream consumers, adding fields like `description` and `endpoints` and reorganizing the DNS record keys. Both formats carry the same registration data for different audiences: the TL stores the event for cryptographic verification, while Pub/Sub distributes it for indexing and display.
 
-**Note on Producer Signatures:**
-- The `producer_signature` field contains the RA instance's signature on the event
-- This signature was validated internally by the TL before accepting the event
-- The signature is included to maintain the complete chain of custody
-- Producer keys are not publicly distributed; trust in validation is part of the TL trust model
+**Pub/Sub message envelope:**
 
 ```json
 {
-  "log_id": "550e8400-e29b-41d4-a716-446655440000",
-  "sequence_number": 1234567,
-  "ans_name": "ans://v1.5.0.support-agent.my-support-co.com",
-  "agent_host": "support-agent.my-support-co.com",
-  "version": "1.5.0",
-  "agent_card_url": "https://support-agent.my-support-co.com/.well-known/agent-card.json",
-  "agent_state": "AGENT_REGISTERED",
-  "producer_signature": "eyJhbGciOiJFUzI1NiIsImtpZCI6InJhMS1wcm9kLWtleS0yMDI0LTAxIn0...",
-  "producer_key_id": "ra1-prod-key-2024-01",
-  "meta": {
-    "agentDisplayName": "MySupportCo Omni-Channel Agent",
-    "agentDescription": "Provides customer support via conversational and transactional interfaces.",
-    "capabilities": ["lookupOrder", "getTicketStatus"],
-    "protocols": ["A2A", "MCP"],
-    "claimTypes": ["SOC2_TYPE2", "SBOM_CYCLONEDX"],
-    "endpoints": [
-      {
-        "protocol": "A2A",
-        "url": "wss://support-agent.my-support-co.com/a2a"
-      },
-      {
-        "protocol": "MCP",
-        "url": "https://support-agent.my-support-co.com/mcp"
-      }
-    ],
-    "registered_date": "2025-10-05T18:00:00Z",
-    "validation_type": "acme-dns-01-ov",
-    "cert_types": {
-      "server": "x509-ov-server",
-      "identity": "x509-ov-client-ans"
-    },
-    "ra_badge_url": "https://transparency.ra.ansregistry.com/registration/reg-8v2k7x9p"
-  },
-  "signature_kms_key_id": "arn:aws:kms:us-east-1:123456789012:key/RootKey-A",
-  "signature": "eyJhbGciOiJFUzI1NiIsInR5cCI6IkpXVCJ9..."
+  "logId": "550e8400-e29b-41d4-a716-446655440000",
+  "schemaVersion": "V1",
+  "payload": { ... }
 }
 ```
 
-**Changes:**
-- `ans_name`: Updated to `ans://v1.5.0.support-agent.my-support-co.com`
-- Added `agent_host`: Explicit FQDN field (persistent identifier)
-- Added `version`: Explicit version field
-- Removed `fqdn`: Replaced by `agent_host`
-- `meta.agentDisplayName`: Human-readable name (required, not unique)
-- `meta.agentDescription`: Description field
-- Removed `meta.provider`: Simplified ownership model
-- Removed `meta.endpoint` (singular): Replaced by `meta.endpoints` array
-- Added `meta.protocols`: Array listing all supported protocols
-- Added `meta.claimTypes`: Array listing the `type` values from the Agent Card's `verifiableClaims`, so Discovery Services and Trust Index crawlers can filter by attestation type without fetching the full Agent Card
-
-### A.4 RA attestation badge
-The response from the Dynamic Badge Lander. It contains two parts: the signed attestation (immutable) and the current Merkle proof (which updates as the tree grows).
-
-This example shows the complete log entry including the producer signature:
-- The `attestation` object contains the complete event record
-- The `producer_signature` is included as part of the immutable record
-- The `attestation_signature` signs the ENTIRE `attestation` object
-- The `current_proof` contains its own signature that covers only the `root_hash`
+**TL event request (also the `producer.event` in A.4):**
 
 ```json
 {
-  "attestation": {
-    "ra_id": "RA-USEAST1-PROD-03",
-    "event_timestamp": "2025-10-05T18:00:00Z",
-    "log_id": "reg-multi-protocol",
-    "sequence_number": 1234567,
-    "ans_name": "ans://v1.5.0.support-agent.my-support-co.com",
-    "agent_host": "support-agent.my-support-co.com",
-    "version": "1.5.0",
-    "agent_display_name": "MySupportCo Omni-Channel Agent",
-    "status": "VERIFIED",
-    "attestations": {
-      "organization_validation": "success",
-      "domain_validation": "acme-dns-01",
-      "cert_types": {
-        "server": "x509-ov-server",
-        "identity": "x509-ov-client-ans"
-      },
-      "server_cert_fingerprint": "sha256:a1b2c3d4...",
-      "identity_cert_fingerprint": "sha256:e5f6g7h8...",
-      "capabilities_hash": "sha256:fedcba98...",
-      "dnssec_status": "validated",
-      "protocols_supported": ["A2A", "MCP"]
-    },
-    "producer_signature": "eyJhbGciOiJFUzI1NiIsImtpZCI6IlBST0QtS0VZLTEyMyIsInR5cCI6IkpXVCIsInRzcCI6MTczMzI1MjQwMCwicmFpZCI6IlJBLVVTRUFTVDEtUFJPRC0wMyJ9...",
-    "producer_key_id": "ra1-prod-key-2024-01",
-    "leaf_hash": "sha256:abc123def456..."
+  "ansId": "550e8400-e29b-41d4-a716-446655440000",
+  "ansName": "ans://v1.5.0.support-agent.my-support-co.com",
+  "eventType": "AGENT_REGISTERED",
+  "agent": {
+    "host": "support-agent.my-support-co.com",
+    "name": "MySupportCo Omni-Channel Agent",
+    "version": "v1.5.0",
+    "providerId": ""
   },
-  "attestation_signature": "eyJhbGciOiJFUzI1NiIsImtpZCI6IlJBLUtFWS00NTYiLCJ0eXAiOiJKV1QiLCJ0c3AiOjE3MzMyNTI0MDAsInJhaWQiOiJSQS1VU0VBU1QxLVBST0QtMDMifQ...",
-  "current_proof": {
-    "leaf_index": 1234567,
-    "tree_size": 9876543,
-    "tree_version": 1,
-    "path": ["sha256:def456789abc...", "sha256:ghi789012def...", "...up to ~40-47 hashes for very large trees..."],
-    "root_hash": "sha256:current1234...",
-    "root_signature": "eyJhbGciOiJFUzI1NiIsImtpZCI6ImFybjphd3M6a21zLXVzLWVhc3QtMToxMjM0NTY3ODkwMTI6a2V5L1Jvb3RLZXktQSIsInR5cCI6IkpXVCJ9..."
+  "attestations": {
+    "identityCert": {
+      "fingerprint": "SHA256:22b8a8045734ad3bd8e24c52db8d9aa4dc12907337f790ee70499999021f0eb9",
+      "type": "X509-OV-CLIENT"
+    },
+    "serverCert": {
+      "fingerprint": "SHA256:d2b71bc02f119a61611b77eadc44c23670917ac4f435fe4e1095d4e5209087ea",
+      "type": "X509-DV-SERVER"
+    },
+    "dnsRecordsProvisioned": {
+      "_ans": "v=ans1; version=1.5.0; url=https://support-agent.my-support-co.com/.well-known/agent-card.json",
+      "_ans-badge": "v=ans-badge1; version=1.5.0; url=https://transparency.ra.ansregistry.com/registration/reg-8v2k7x9p"
+    },
+    "domainValidation": "ACME-DNS-01-OV"
+  },
+  "expiresAt": "2026-10-05T18:00:00.000000Z",
+  "issuedAt": "2025-10-05T18:00:00.000000Z",
+  "raId": "ra-instance-prod-us-east-1",
+  "timestamp": "2025-10-05T18:00:00.000000Z"
+}
+```
+
+The `eventType` value `AGENT_REGISTERED` is the published name for a successful registration. The `agent.name` field carries the human-readable display name, not the FQDN.
+
+### A.4 Transparency Log badge response
+
+The response from the TL's per-agent badge endpoint (`GET /v1/agents/{agentId}/transparency-log`). This is the data structure that the Dynamic Badge Lander, the marketplace, and the search API consume. It contains the sealed event (immutable), the TL's outer signature, and a Merkle inclusion proof that updates as the tree grows.
+
+The `status` field is computed by the TL at query time from the agent's current lifecycle state.
+
+```json
+{
+  "schemaVersion": "V1",
+  "status": "ACTIVE",
+  "payload": {
+    "logId": "550e8400-e29b-41d4-a716-446655440000",
+    "producer": {
+      "event": {
+        "ansId": "550e8400-e29b-41d4-a716-446655440000",
+        "ansName": "ans://v1.5.0.support-agent.my-support-co.com",
+        "eventType": "AGENT_REGISTERED",
+        "agent": {
+          "host": "support-agent.my-support-co.com",
+          "name": "MySupportCo Omni-Channel Agent",
+          "version": "v1.5.0"
+        },
+        "attestations": {
+          "identityCert": {
+            "fingerprint": "SHA256:22b8a8045734ad3bd8e24c52db8d9aa4dc12907337f790ee70499999021f0eb9",
+            "type": "X509-OV-CLIENT"
+          },
+          "serverCert": {
+            "fingerprint": "SHA256:d2b71bc02f119a61611b77eadc44c23670917ac4f435fe4e1095d4e5209087ea",
+            "type": "X509-DV-SERVER"
+          },
+          "dnsRecordsProvisioned": {
+            "_ans": "v=ans1; version=1.5.0; url=https://support-agent.my-support-co.com/.well-known/agent-card.json",
+            "_ans-badge": "v=ans-badge1; version=1.5.0; url=https://transparency.ra.ansregistry.com/registration/reg-8v2k7x9p"
+          },
+          "domainValidation": "ACME-DNS-01-OV"
+        },
+        "expiresAt": "2026-10-05T18:00:00.000000Z",
+        "issuedAt": "2025-10-05T18:00:00.000000Z",
+        "raId": "ra-instance-prod-us-east-1",
+        "timestamp": "2025-10-05T18:00:00.000000Z"
+      },
+      "keyId": "ra-prod-key-2025-01",
+      "signature": "eyJhbGciOiJFUzI1NiJ9..."
+    }
+  },
+  "signature": "eyJhbGciOiJFUzI1NiIsImtpZCI6ImFybjphd3M6a21zOnVzLWVhc3QtMSJ9...",
+  "merkleProof": {
+    "leafHash": "abc123def456...",
+    "leafIndex": 1234567,
+    "treeSize": 9876543,
+    "treeVersion": 1,
+    "path": ["def456789abc...", "012345abcdef...", "..."],
+    "rootHash": "current1234abcdef...",
+    "rootSignature": "eyJhbGciOiJFUzI1NiJ9..."
   }
 }
 ```
 
-**Signature coverage:**
+The response has four top-level sections. The `payload` contains the sealed event inside a producer envelope. The `signature` is the TL's outer attestation over the entire payload. The `merkleProof` proves the event's inclusion in the Merkle tree. The `status` reflects the agent's current lifecycle state.
 
-1. **producer_signature** covers all fields in the attestation EXCEPT:
-   - `producer_signature` itself
-   - `producer_key_id`
-   - `leaf_hash` (which is computed after signing)
+**`payload`** is a nested object. The outer layer carries `logId` (assigned by the TL) and a `producer` block. Inside `producer`, the `event` has the same structure shown in A.3, the `keyId` identifies the RA instance key that signed the event, and the `signature` is the producer's JWS over the event. External verifiers cannot verify the producer signature without the RA's internal key, but it is part of the sealed record for forensic purposes.
 
-2. **attestation_signature** covers:
-   - The ENTIRE `attestation` object as shown (including producer_signature and leaf_hash)
+**`signature`** is the TL's JWS over the entire `payload`. Verify this with the TL's public key.
 
-3. **root_signature** covers:
-   - Only the string value of `root_hash` (not the entire proof object)
+**`merkleProof`** proves inclusion. Given `leafHash`, `leafIndex`, and `path`, a verifier recomputes the root and checks it against `rootHash`. The `rootSignature` is the TL's JWS over `rootHash`, verifiable with the TL's signing key. The `treeVersion` increments when the TL rotates its KMS signing key, letting verifiers select the correct historical key for old proofs.
 
-**Verification process:**
-1. Verify `attestation_signature` covers the `attestation` object using the RA's public key
-2. The `producer_signature` is included for completeness but requires internal keys to verify
-3. Use the `current_proof` to mathematically verify that `leaf_hash` is included in the tree
-4. Verify `root_signature` covers the `root_hash` using the TL's public key
+**`status`** is one of `ACTIVE`, `DEPRECATED`, `WARNING`, `EXPIRED`, or `REVOKED`. The TL computes this at query time from the agent's lifecycle state. It is not stored in the sealed event.
 
-**Note:** The producer signature is part of the sealed record but cannot be independently verified without access to internal producer keys. This is by design; external verifiers rely on the TL's operational integrity for producer validation.
-
-**Note on `capabilities_hash`:** This field contains the SHA-256 hash of the Agent Card content. When the AHP submitted `agentCardContent` in the registration payload (§6.1.1), the hash was computed at registration and sealed into the TL. When the AHP omitted the card content, this field is null at registration. The AIM computes and records the hash on first successful fetch of the live Agent Card (§6.8).
-
-**Note on Path Length:** The path contains log₂(tree_size) hashes:
-- 1 billion events ≈ 30 hashes (< 1KB)
-- 1 trillion events ≈ 40 hashes (~1.3KB)
-- 10 trillion events ≈ 44 hashes (~1.4KB)
-
-Even at extreme scale, the path remains a reasonable size to include in responses.
-
-**Tree Version:** The `tree_version` field increments when a new KMS signing key is activated. Verifiers use this to select the correct historical key for old proofs. The system supports key rotation without invalidating existing proofs, maintaining a clear audit trail of key changes.
+The `path` array contains log₂(`treeSize`) hashes. A tree with a billion events needs about 30 hashes (under 1KB). Even at a trillion events, the proof stays under 1.5KB.
 
 ### A.5 AIM failure report
 The payload an AIM worker publishes when it detects an integrity failure. Consumed by the Remediation Service.
@@ -1634,8 +1618,8 @@ The payload an AIM worker publishes when it detects an integrity failure. Consum
   "check": {
     "record_type": "_ans",
     "failure_type": "MISMATCH",
-    "expected_value": "v=ans1; mode=card; url=https://support-agent.my-support-co.com/.well-known/agent-card.json",
-    "actual_value": "v=ans1; mode=card; url=https://malicious-site.com/evil-card.json"
+    "expected_value": "v=ans1; version=1.5.0; url=https://support-agent.my-support-co.com/.well-known/agent-card.json",
+    "actual_value": "v=ans1; version=1.5.0; url=https://malicious-site.com/evil-card.json"
   }
 }
 ```
@@ -1646,74 +1630,56 @@ The payload an AIM worker publishes when it detects an integrity failure. Consum
 - Removed `fqdn`: Replaced by `agent_host`
 
 ### A.6 Revocation request
-The JSON payload submitted by an AHP to the RA's `/revoke` endpoint.
+The JSON payload submitted by an AHP to the RA's `/agents/{agentId}/revoke` endpoint.
 
 ```json
 {
-  "request_type": "agent_revocation",
-  "ans_name": "ans://v1.5.0.support-agent.my-support-co.com",
-  "reason_code": "CESSATION_OF_OPERATION",
-  "reason_description": "Service is being retired."
+  "reason": "CESSATION_OF_OPERATION",
+  "comments": "Service is being retired."
 }
 ```
 
-**Changes:**
-- `ans_name`: Updated to new format
-
-**Note:** The RA may accept either ANSName or agent_host (FQDN) for revocation requests to support operational flexibility.
+The agent is identified by the `agentId` path parameter (`POST /agents/{agentId}/revoke`), not by a field in the request body. The `reason` field is required; `comments` is optional (max 200 chars).
 
 ### A.7 Pub/Sub event payload (revocation)
-The event published after the RA processes the revocation and seals it into the log.
-
-**Signature scope:** Same as A.3. The `signature` signs all fields except `signature` and `signature_kms_key_id`.
+The event published after the RA processes the revocation and seals it into the log. The Pub/Sub envelope is the same as A.3 (`logId`, `schemaVersion`, `payload`). The payload uses the same structure as A.3 with two additional fields: `revocationReasonCode` and `revokedAt`.
 
 ```json
 {
-  "agent_host": "support-agent.my-support-co.com",
-  "agent_card_url": "https://support-agent.my-support-co.com/.well-known/agent-card.json",
-  "ans_name": "ans://v1.5.0.support-agent.my-support-co.com",
-  "version": "1.5.0",
-  "agent_state": "AGENT_REVOKED",
-  "meta": {
-    "agentDisplayName": "MySupportCo Omni-Channel Agent",
-    "agentDescription": "Provides customer support via conversational and transactional interfaces.",
-    "capabilities": ["lookupOrder", "getTicketStatus"],
-    "protocols": ["A2A", "MCP"],
-    "registered_date": "2025-10-05T18:00:00Z",
-    "event_timestamp": "2025-11-20T14:00:00Z",
-    "endpoints": [
-      {
-        "protocol": "A2A",
-        "url": "wss://support-agent.my-support-co.com/a2a"
-      },
-      {
-        "protocol": "MCP",
-        "url": "https://support-agent.my-support-co.com/mcp"
-      }
-    ],
-    "validation_type": "acme-dns-01-ov",
-    "cert_types": {
-      "server": "x509-ov-server",
-      "identity": "x509-ov-client-ans"
-    },
-    "revocation_reason": "CESSATION_OF_OPERATION",
-    "ra_badge_url": "https://transparency.ra.ansregistry.com/registration/reg-8v2k7x9p"
+  "ansId": "550e8400-e29b-41d4-a716-446655440000",
+  "ansName": "ans://v1.5.0.support-agent.my-support-co.com",
+  "eventType": "AGENT_REVOKED",
+  "agent": {
+    "host": "support-agent.my-support-co.com",
+    "name": "MySupportCo Omni-Channel Agent",
+    "version": "v1.5.0",
+    "providerId": ""
   },
-  "signature_kms_key_id": "arn:aws:kms:us-east-1:123456789012:key/RootKey-A",
-  "signature": "eyJhbGciOiJFUzI1NiIsInR5cCI6IkpXVCJ9..."
+  "attestations": {
+    "identityCert": {
+      "fingerprint": "SHA256:22b8a8045734ad3bd8e24c52db8d9aa4dc12907337f790ee70499999021f0eb9",
+      "type": "X509-OV-CLIENT"
+    },
+    "serverCert": {
+      "fingerprint": "SHA256:d2b71bc02f119a61611b77eadc44c23670917ac4f435fe4e1095d4e5209087ea",
+      "type": "X509-DV-SERVER"
+    },
+    "dnsRecordsProvisioned": {
+      "_ans": "v=ans1; version=1.5.0; url=https://support-agent.my-support-co.com/.well-known/agent-card.json",
+      "_ans-badge": "v=ans-badge1; version=1.5.0; url=https://transparency.ra.ansregistry.com/registration/reg-8v2k7x9p"
+    },
+    "domainValidation": "ACME-DNS-01-OV"
+  },
+  "expiresAt": "2026-10-05T18:00:00.000000Z",
+  "revocationReasonCode": "CESSATION_OF_OPERATION",
+  "revokedAt": "2025-11-20T14:00:00.000000Z",
+  "issuedAt": "2025-10-05T18:00:00.000000Z",
+  "raId": "ra-instance-prod-us-east-1",
+  "timestamp": "2025-11-20T14:00:00.000000Z"
 }
 ```
 
-**Changes:**
-- Added `agent_host`: FQDN (persistent identifier)
-- Added `version`: Explicit version
-- `ans_name`: Updated to new format
-- Removed `fqdn`: Replaced by `agent_host`
-- `meta.agentDisplayName`: Added (required, not unique)
-- `meta.agentDescription`: Added
-- `meta.protocols`: Added array
-- Removed `meta.provider`: Simplified ownership
-- Removed `meta.endpoint` (singular): Replaced by `meta.endpoints` array
+Compared to the registration payload (A.3), two fields are added (`revocationReasonCode`, `revokedAt`) and the `eventType` is `AGENT_REVOKED` instead of `AGENT_REGISTERED`. The `timestamp` reflects the revocation time, not the original registration time. All other fields are identical.
 
 ### A.8 DNS records
 The DNS records provisioned by the RA for the registered agent.
@@ -1737,11 +1703,11 @@ _443._tcp   IN  TLSA   3 0 1 <sha256_fingerprint_of_server_certificate>
 
 ; Connection hints for client agents (see §5.5.1)
 ; This agent supports A2A (with a hosted card) and MCP (direct connection)
-_ans        IN  TXT    "v=ans1; p=a2a; mode=card; url=https://support-agent.my-support-co.com/.well-known/agent-card.json"
-_ans        IN  TXT    "v=ans1; p=mcp; mode=direct"
+_ans        IN  TXT    "v=ans1; version=1.5.0; p=a2a; url=https://support-agent.my-support-co.com/.well-known/agent-card.json"
+_ans        IN  TXT    "v=ans1; version=1.5.0; p=mcp; mode=direct"
 
 ; Points to the RA-hosted Dynamic Badge Lander (one record per ACTIVE version)
-_ans-badge   IN  TXT    "v=ans-badge1; version=v1.5.0; url=https://transparency.ra.ansregistry.com/registration/reg-8v2k7x9p"
+_ans-badge   IN  TXT    "v=ans-badge1; version=1.5.0; url=https://transparency.ra.ansregistry.com/registration/reg-8v2k7x9p"
 
 ; --- High-assurance addition (Requires DNSSEC) ---
 ; For full verification (§5.1.1, step 2+), agents add one more record.
@@ -1794,7 +1760,7 @@ When revoking an agent on an externally-managed domain, the RA returns a `dnsRec
   "agentId": "550e8400-e29b-41d4-a716-446655440000",
   "ansName": "ans://v1.5.0.support-agent.my-support-co.com",
   "status": "REVOKED",
-  "reasonCode": "CESSATION_OF_OPERATION",
+  "reason": "CESSATION_OF_OPERATION",
   "revokedAt": "2025-11-20T14:00:00Z",
   "dnsRecordsToRemove": [
     {
@@ -1812,13 +1778,13 @@ When revoking an agent on an externally-managed domain, the RA returns a `dnsRec
     {
       "name": "_ans.support-agent.my-support-co.com",
       "type": "TXT",
-      "value": "v=ans1; mode=card; url=https://support-agent.my-support-co.com/.well-known/agent-card.json",
+      "value": "v=ans1; version=1.5.0; url=https://support-agent.my-support-co.com/.well-known/agent-card.json",
       "purpose": "TRUST"
     },
     {
       "name": "_ans-badge.support-agent.my-support-co.com",
       "type": "TXT",
-      "value": "v=ans-badge1; version=v1.5.0; url=https://transparency.ra.ansregistry.com/registration/reg-8v2k7x9p",
+      "value": "v=ans-badge1; version=1.5.0; url=https://transparency.ra.ansregistry.com/registration/reg-8v2k7x9p",
       "purpose": "BADGE"
     }
   ]
