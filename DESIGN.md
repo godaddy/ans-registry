@@ -623,8 +623,8 @@ To prevent circular dependencies when signatures are stored within JSON objects:
      "batch_signature": "..."       // Signs the entire event object
    }
    ```
-  - `producer_signature` covers: event object excluding itself
-  - `batch_signature` covers: entire event object (including producer_signature)
+- `producer_signature` covers: event object excluding itself
+- `batch_signature` covers: entire event object (including producer_signature)
 
 ## 5.0 Trust, security, and attestation
 
