@@ -623,8 +623,8 @@ To prevent circular dependencies when signatures are stored within JSON objects:
      "batch_signature": "..."       // Signs the entire event object
    }
    ```
-   - `producer_signature` covers: event object excluding itself
-   - `batch_signature` covers: entire event object (including producer_signature)
+  - `producer_signature` covers: event object excluding itself
+  - `batch_signature` covers: entire event object (including producer_signature)
 
 ## 5.0 Trust, security, and attestation
 
@@ -915,25 +915,25 @@ sequenceDiagram
 
 #### 6.1.1 Stage 1: Pending registration
 The AHP submits a registration request via `POST` to the RA's Lifecycle Management API. The JSON payload contains:
-  * **Identity Components:**
-    - `agentDisplayName` (required, max 64 chars): Human-readable name for discovery. Not required to be unique.
-    - `agentDescription` (optional, max 150 chars): Brief capability description
-    - `version` (required): Semantic version string (e.g., "1.0.0")
-    - `agentHost` (required): Complete FQDN serving as the agent's persistent identifier (e.g., "sentiment-analyzer.example.com")
-  * **Endpoint Configuration** (required): Array of protocol-specific endpoints (minimum 1), where each endpoint specifies:
-    - `protocol` (required): One of `A2A`, `MCP`, or `HTTP-API`
-    - `agentUrl` (required): The actual endpoint URL
-    - `metadataUrl` (optional): Link to protocol metadata (e.g., `/.well-known/mcp.json`)
-    - `documentationUrl` (optional): Link to developer documentation
-    - `functions` (optional): Array of function declarations for this protocol. Each function has an `id`, a `name`, and optional `tags` for categorization. Full function schemas (parameter types, descriptions) live in the protocol-specific metadata at the `metadataUrl`.
-    - `transports` (optional): Ordered set of supported transport mechanisms. Values: `STREAMABLE-HTTP`, `SSE`, `JSON-RPC`, `GRPC`, `REST`, `HTTP`. When omitted, clients infer transport from the protocol.
-  * **Cryptographic Materials:**
-    - `identityCsrPEM` (required): CSR for version-bound Identity Certificate
-    - `serverCertificatePEM` (optional): BYOC server certificate, OR
-    - `serverCsrPEM` (optional): CSR for RA-issued Server Certificate
-    - `serverCertificateChainPEM` (optional): Certificate chain for BYOC
-  * **Agent Card (optional):**
-    - `agentCardContent` (optional): The full Agent Card JSON object.
+* **Identity Components:**
+  - `agentDisplayName` (required, max 64 chars): Human-readable name for discovery. Not required to be unique.
+  - `agentDescription` (optional, max 150 chars): Brief capability description
+  - `version` (required): Semantic version string (e.g., "1.0.0")
+  - `agentHost` (required): Complete FQDN serving as the agent's persistent identifier (e.g., "sentiment-analyzer.example.com")
+* **Endpoint Configuration** (required): Array of protocol-specific endpoints (minimum 1), where each endpoint specifies:
+  - `protocol` (required): One of `A2A`, `MCP`, or `HTTP-API`
+  - `agentUrl` (required): The actual endpoint URL
+  - `metadataUrl` (optional): Link to protocol metadata (e.g., `/.well-known/mcp.json`)
+  - `documentationUrl` (optional): Link to developer documentation
+  - `functions` (optional): Array of function declarations. Each has an `id`, `name`, and optional `tags`. Full schemas live at the `metadataUrl`.
+  - `transports` (optional): Ordered transport mechanisms. Values: `STREAMABLE-HTTP`, `SSE`, `JSON-RPC`, `GRPC`, `REST`, `HTTP`. When omitted, clients infer from protocol.
+* **Cryptographic Materials:**
+  - `identityCsrPEM` (required): CSR for version-bound Identity Certificate
+  - `serverCertificatePEM` (optional): BYOC server certificate, OR
+  - `serverCsrPEM` (optional): CSR for RA-issued Server Certificate
+  - `serverCertificateChainPEM` (optional): Certificate chain for BYOC
+* **Agent Card (optional):**
+  - `agentCardContent` (optional): The full Agent Card JSON object.
       When provided, at least one endpoint must include a `metadataUrl`.
       The RA validates the card's structure, hashes it, and seals the hash into the Transparency Log at activation.
       The `metadataUrl` tells the AIM where to fetch the live card for ongoing integrity verification (§6.8).
@@ -943,8 +943,8 @@ The AHP submits a registration request via `POST` to the RA's Lifecycle Manageme
       Agent Cards behind authentication are permitted (the A2A spec allows this).
       An inaccessible card means no `capabilities_hash` in the TL entry.
       This is a trust signal, not a registration failure: the Trust Index scores integrity lower when no hash is available, but registration proceeds.
-  * **Privacy Configuration (optional):**
-    - `echConfigList` (optional): Base64-encoded ECHConfigList for Encrypted Client Hello. When provided, the RA includes it in the HTTPS record, enabling clients to hide the agent's hostname during TLS handshake. The AHP generates and manages ECH keys; the RA only publishes the configuration.
+* **Privacy Configuration (optional):**
+  - `echConfigList` (optional): Base64-encoded ECHConfigList for Encrypted Client Hello. The RA publishes it in the HTTPS record. The AHP generates and manages ECH keys.
 **Validation.** The RA validates the payload: `agentDisplayName` presence and length (max 64 chars), `agentDescription` length (max 150 chars), `version` format (semantic version), `agentHost` format (valid FQDN per RFC 1123, max 253 chars), and at least one endpoint with a valid protocol and URL.
 
 If valid, the RA constructs the `ANSName` as `ans://v{version}.{agentHost}`, creates an internal record, and sets its status to `pending`. No public actions are taken in this state.
@@ -1481,8 +1481,8 @@ The RA removes the `ech=` parameter from the HTTPS record, reverting to protocol
 * **Automated credential rotation.** Zero-downtime rotation for all external service integration credentials.
 * **Federated, multi-RA ecosystem.** The single-RA model is the bootstrap phase. The long-term goal is a marketplace of interoperable RAs, governed by a standards body analogous to the CA/B Forum (an "ANS Forum"). This requires the Federated Trust Manager mode of the ANS Trust Provisioner (ADR 009) and a central Federation Registry defining RA compliance policies.
 * **RA-to-RA federation protocol.** Client-side trust enables federation, but a resilient ecosystem needs formal server-side communication between registrars. This includes:
-    * Prioritized channels: anchor thread (revocations), signal thread (policies, reputation), and probe thread (health monitoring).
-    * Zero-trust identity via cryptographic workload identity standards (e.g., SPIFFE) instead of network-based controls.
+  * Prioritized channels: anchor thread (revocations), signal thread (policies, reputation), and probe thread (health monitoring).
+  * Zero-trust identity via cryptographic workload identity standards (e.g., SPIFFE) instead of network-based controls.
 * **Runtime integrity (ZKPs/TEEs).** Zero-Knowledge Proofs and Trusted Execution Environment attestations would close the "application integrity gap," letting an agent prove its runtime code has not been tampered with. Layer 1 identity via the Identity Certificate alone cannot provide this guarantee.
 * **Verifiable claim types and issuer accreditation.** The Agent Card schema defines a `verifiableClaims` extension point (§3.2.2, §A.2). Remaining work: define specific claim type standards (e.g., "AIBOMv1", "SOC2ComplianceProof"), accredit third-party issuers, and build RA validation logic per type.
 * **SCITT compliance and public root anchoring.** Align the TL with the IETF SCITT architecture by adopting COSE-based signed statements and standardized receipts. Separately, the HCS-2 specification (§1.2) will define periodic publication of the TL's Merkle root to a public ledger for externally verifiable timestamps.
