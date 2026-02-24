@@ -26,9 +26,12 @@ Existing agent protocols continue to work. ANS adds the identity layer underneat
 This architecture builds on "Agent Name Service for Secure AI Agent Discovery" by Narajala, Huang, Habler, and Sheriff (OWASP). The design departs from that paper in several ways, motivated by production deployment at internet scale.
 
 The core design choices have independent corroboration from unrelated efforts.
-The Hedera ecosystem's HCS-14 standard independently arrived at DNS TXT records for agent discovery, using `_agent.<nativeId>` as the record name.
-What began as independent convergence is now active collaboration: GoDaddy is working with the HCS-14 working group to define an ANS Profile within HCS-14, so that resolvers can verify ANS DNS records, certificates, and log proofs through a standard interface without ANS-specific branching.
-A companion effort will define a Merkle Tree Registry specification under HCS-2, anchoring periodic ANS Transparency Log roots to a public distributed ledger for independently verifiable timestamps.
+Hiero's HCS-14 standard independently arrived at DNS TXT records for agent discovery, organized around Profiles that define how resolvers interpret specific record types.
+The `.agent` profile, for example, uses `_agent.<nativeId>` as the record name.
+What began as independent convergence is now active collaboration.
+GoDaddy and HOL (Hashgraph Online) are drafting two specifications.
+The first adds an ANS Profile to the Universal Agent ID standard (HCS-14), so that any HCS-14 resolver can discover ANS agents through the same interface it uses for agents from other registries.
+The second (HCS-27) defines a checkpoint format for publishing the TL's signed Merkle root to a Hiero consensus topic, giving anyone a public, timestamped record of the tree's state.
 The IETF's SCITT working group (Supply Chain Integrity, Transparency and Trust), whose core architecture draft is in the RFC Editor Queue, defines an append-only transparency log with signed statements and receipts that maps closely to the ANS Transparency Log.
 Google's A2A and Anthropic's MCP, now consolidating under the Linux Foundation, define agent communication but explicitly defer identity and discovery to external infrastructure.
 The convergence of these independent efforts on the same structural gap corroborates the design direction.
