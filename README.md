@@ -11,8 +11,8 @@ The registry is operational with REST APIs for agent discovery and search.
 ## API Reference
 
 The ANS Registry REST API is documented using the OpenAPI (Swagger) specification:
-
-📄 [View OpenAPI Spec](https://developer.godaddy.com/swagger/swagger_ans.json)
+* 📄 [View OpenAPI Spec - Human Readable](https://developer.godaddy.com/doc/endpoint/ans)
+* 📄 [OpenAPI Spec - AI/Machine Readable](https://developer.godaddy.com/swagger/swagger_ans.json)
 
 ## Overview
 
