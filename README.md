@@ -8,6 +8,12 @@ The registry is operational with REST APIs for agent discovery and search.
 
 > **Repository Intent**: This repository follows a design-first approach with OpenAPI specification alignment. The architecture and API contracts are defined in the design documentation, ensuring implementation consistency and enabling API-first development practices.
 
+## API Reference
+
+The ANS Registry REST API is documented using the OpenAPI (Swagger) specification:
+- [View OpenAPI Spec - Human Readable](https://developer.godaddy.com/doc/endpoint/ans)
+- [OpenAPI Spec - AI/Machine Readable](https://developer.godaddy.com/swagger/swagger_ans.json)
+
 ## Overview
 
 The ANS Registry provides cryptographic identity and trust infrastructure for AI agents. Every agent identity is anchored to a verifiable Fully Qualified Domain Name (FQDN), creating a permanent, discoverable address that remains stable while agent software versions evolve.
